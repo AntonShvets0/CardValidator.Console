@@ -60,7 +60,7 @@ public static class Program
         if (responseParts.Length < 2) 
             return false;
 
-        var decodedPayload = _jwsGenerator.Decode(responseParts[1]);
+        var decodedPayload = Base64UrlHelper.Decode(responseParts[1]);
         var responseData = JsonSerializer.Deserialize<ResponseData>(decodedPayload);
 
         return responseData?.Status == "Success";

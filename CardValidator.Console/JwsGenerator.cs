@@ -36,8 +36,8 @@ public class JwsGenerator
         var payloadJson = JsonSerializer.Serialize(payload);
 
         // Base64Url кодирование header и payload
-        var encodedHeader = Base64UrlEncode(headerJson);
-        var encodedPayload = Base64UrlEncode(payloadJson);
+        var encodedHeader = Base64UrlHelper.Encode(headerJson);
+        var encodedPayload = Base64UrlHelper.Encode(payloadJson);
 
         // Создаем подпись
         var dataToSign = encodedHeader + "." + encodedPayload;
@@ -46,41 +46,12 @@ public class JwsGenerator
         // Формируем JWS
         return dataToSign + "." + signature;
     }
-    
-    public string Decode(string input)
-    {
-        var base64 = input.Replace('-', '+').Replace('_', '/');
-            
-        // Добавляем padding при необходимости
-        switch (base64.Length % 4)
-        {
-            case 2: base64 += "=="; break;
-            case 3: base64 += "="; break;
-        }
-            
-        var bytes = Convert.FromBase64String(base64);
-        return Encoding.UTF8.GetString(bytes);
-    }
 
     private string CreateSignature(string data)
     {
         using var hmac = new HMACSHA256(Convert.FromBase64String(_sharedKey));
         
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
-        return Base64UrlEncode(hash);
-    }
-
-    private string Base64UrlEncode(string input)
-    {
-        var bytes = Encoding.UTF8.GetBytes(input);
-        return Base64UrlEncode(bytes);
-    }
-
-    private string Base64UrlEncode(byte[] input)
-    {
-        return Convert.ToBase64String(input)
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
+        return Base64UrlHelper.Encode(hash);
     }
 }

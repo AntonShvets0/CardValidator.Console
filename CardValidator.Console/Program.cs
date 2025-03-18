@@ -1,76 +1,51 @@
-﻿
-using System.Text;
-using System.Text.Json;
-using CardValidator.Console.Models;
+﻿using System.Net.Http.Headers;
+using CardValidator.Console.Models.Entities;
+using CardValidator.Console.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
-namespace CardValidator.Console;
+var builder = Host.CreateApplicationBuilder(args);
 
-public static class Program
+builder.Configuration.Sources.Clear();
+builder.Configuration.SetBasePath(Directory.GetCurrentDirectory());
+
+// ВНИМАНИЕ: appsettings.json содержит ТЕСТОВЫЕ ключи API и адреса.
+// В реальном проекте этот файл должен быть добавлен в .gitignore,
+// а чувствительные данные должны храниться в переменных окружения,
+// секретах пользователя или другом защищенном хранилище.
+// Это сделано для упрощения проверки тестового задания.
+builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+builder.Services.Configure<PaymentServiceOptions>(builder.Configuration.GetSection("PaymentService"));
+builder.Services.AddHttpClient<CardsValidationService>((sp, client) =>
 {
-    private const string Host = "acstopay.online";
-    private const string KeyId = "47e8fde35b164e888a57b6ff27ec020f";
-    private const string SharedKey = "ac/1LUdrbivclAeP67iDKX2gPTTNmP0DQdF+0LBcPE/3NWwUqm62u5g6u+GE8uev5w/VMowYXN8ZM+gWPdOuzg==";
-    private const string ApiUrl = "https://{0}/api/testassignments/pan";
-    private static readonly JwsGenerator _jwsGenerator = new(KeyId, SharedKey);
+    var options = sp.GetRequiredService<IOptions<PaymentServiceOptions>>().Value;
+    client.BaseAddress = new Uri(options.Host);
+    client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    client.DefaultRequestHeaders.Add("kid", options.KeyId);
+});
+
+var app = builder.Build();
+var cardValidationService = app.Services.GetRequiredService<CardsValidationService>();
+
+while (true)
+{
+    Console.WriteLine("Enter card number to verify (or 'exit' to exit):");
+    string? input = Console.ReadLine();
     
-    public static async Task Main(string[] args)
+    if (string.IsNullOrWhiteSpace(input) || input.ToLower() == "exit")
+        break;
+    
+    try
     {
-        while (true)
-        {
-            System.Console.WriteLine("Enter PAN or 'test' for test all scenarios: ");
-            var pan = System.Console.ReadLine();
-            if (pan == "test")
-            {
-                await RunTestScenariosAsync();
-                return;
-            }
-
-            if (string.IsNullOrEmpty(pan)) continue;
-            await ValidateCardAndWriteStatusAsync(pan);
-        }
+        bool result = await cardValidationService.ValidateCardAsync(input);
+        Console.WriteLine(result ? "Successfully" : "Unsuccessfully");
     }
-
-    private static async Task ValidateCardAndWriteStatusAsync(string pan)
+    catch (Exception ex)
     {
-        System.Console.WriteLine(
-            await ValidateCardAsync(pan) ? "Successfully" : "Unsuccessfully"
-        );
+        Console.WriteLine($"Error while validation card: {ex.Message}");
     }
     
-    private static async Task<bool> ValidateCardAsync(string pan)
-    {
-        var jws = _jwsGenerator.Generate(new
-        {
-            CardInfo = new
-            {
-                Pan = pan
-            }
-        });
-
-        using var httpClient = new HttpClient();
-        var content = new StringContent(jws, Encoding.UTF8, "application/jose");
-        var response = await httpClient.PostAsync(string.Format(ApiUrl, Host), content);
-
-        if (!response.IsSuccessStatusCode)
-            return false;
-
-        var responseContent = await response.Content.ReadAsStringAsync();
-                
-        var responseParts = responseContent.Split('.');
-        if (responseParts.Length < 2) 
-            return false;
-
-        var decodedPayload = Base64UrlHelper.Decode(responseParts[1]);
-        var responseData = JsonSerializer.Deserialize<ResponseData>(decodedPayload);
-
-        return responseData?.Status == "Success";
-    }
-
-    // Необязательная фича, для быстрых тестов
-    private static async Task RunTestScenariosAsync()
-    {
-        var cards = new[] { "4111111111111111", "4627100101654724", "4486441729154030", "4024007123874108" };
-        foreach (var card in cards)
-            await ValidateCardAndWriteStatusAsync(card);
-    }
+    Console.WriteLine();
 }

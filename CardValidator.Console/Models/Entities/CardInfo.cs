@@ -1,4 +1,4 @@
-﻿namespace CardValidator.Console.Models;
+﻿namespace CardValidator.Console.Models.Entities;
 
 public class CardInfo
 {
